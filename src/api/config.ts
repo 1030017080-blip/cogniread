@@ -1,30 +1,38 @@
 // 阿里云百炼 API 配置
 
-// 检测是否在生产环境（Netlify）
+// 检测运行环境
+const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
 const isProduction = import.meta.env.PROD
 
 export const BAILIAN_CONFIG = {
-  // API 地址 - 生产环境使用代理，开发环境直连
-  baseUrl: isProduction 
-    ? '/.netlify/functions/bailian'  // Netlify Function 代理
-    : 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
+  // API 地址
+  // Vercel: /api/bailian
+  // Netlify: /.netlify/functions/bailian
+  // 本地开发: 直接调用百炼 API
+  baseUrl: isVercel 
+    ? '/api/bailian'
+    : (isProduction && !isVercel)
+      ? '/.netlify/functions/bailian'
+      : 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
   
-  embeddingUrl: isProduction
-    ? '/.netlify/functions/bailian'
-    : 'https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding',
+  embeddingUrl: isVercel
+    ? '/api/bailian'
+    : (isProduction && !isVercel)
+      ? '/.netlify/functions/bailian'
+      : 'https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding',
   
   // 模型配置
   models: {
-    chat: 'qwen-plus',           // 对话模型
-    chatTurbo: 'qwen-turbo',     // 快速对话
-    embedding: 'text-embedding-v2', // 向量嵌入
+    chat: 'qwen-plus',
+    chatTurbo: 'qwen-turbo',
+    embedding: 'text-embedding-v2',
   },
   
-  // App ID（从环境变量或配置获取）
+  // App ID
   appId: import.meta.env.VITE_BAILIAN_APP_ID || '',
   apiKey: import.meta.env.VITE_BAILIAN_API_KEY || '',
   
-  // 是否使用代理
+  // 是否使用代理（生产环境使用）
   useProxy: isProduction
 }
 
