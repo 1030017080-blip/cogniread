@@ -1,8 +1,13 @@
 // Netlify Function - 百炼 API 代理
-// 使用 CommonJS 格式确保兼容性
+// 使用 CommonJS 格式
+
+// 硬编码 API Key 作为备用（仅用于调试）
+const FALLBACK_API_KEY = 'sk-75e7457a58b24fae8dbab4971a5d98cc'
 
 exports.handler = async function(event, context) {
-  console.log('bailian function called, method:', event.httpMethod)
+  console.log('=== Bailian Function Started ===')
+  console.log('Method:', event.httpMethod)
+  console.log('Headers:', JSON.stringify(event.headers))
   
   // 允许 CORS
   const headers = {
@@ -26,25 +31,35 @@ exports.handler = async function(event, context) {
   }
 
   try {
-    const body = JSON.parse(event.body || '{}')
-    const { endpoint, payload } = body
-
-    console.log('Request:', { endpoint, hasPayload: !!payload })
-
-    // 百炼 API 配置
-    const BAILIAN_API_KEY = process.env.BAILIAN_API_KEY || process.env.VITE_BAILIAN_API_KEY
+    // 检查环境变量
+    const envApiKey = process.env.VITE_BAILIAN_API_KEY || process.env.BAILIAN_API_KEY
+    const BAILIAN_API_KEY = envApiKey || FALLBACK_API_KEY
+    
+    console.log('Environment check:')
+    console.log('- VITE_BAILIAN_API_KEY:', process.env.VITE_BAILIAN_API_KEY ? 'SET' : 'NOT SET')
+    console.log('- BAILIAN_API_KEY:', process.env.BAILIAN_API_KEY ? 'SET' : 'NOT SET')
+    console.log('- Using fallback:', !envApiKey ? 'YES' : 'NO')
 
     if (!BAILIAN_API_KEY) {
-      console.error('API Key not configured!')
+      console.error('No API Key available!')
       return {
         statusCode: 500,
         headers,
         body: JSON.stringify({ 
           error: 'API Key not configured',
-          hint: 'Please set BAILIAN_API_KEY in Netlify environment variables'
+          hint: 'Set VITE_BAILIAN_API_KEY in Netlify environment variables'
         })
       }
     }
+
+    const body = JSON.parse(event.body || '{}')
+    const { endpoint, payload } = body
+
+    console.log('Request:', { 
+      endpoint, 
+      hasPayload: !!payload,
+      payloadPreview: JSON.stringify(payload).substring(0, 200)
+    })
 
     // API URLs
     const urls = {
@@ -53,7 +68,7 @@ exports.handler = async function(event, context) {
     }
 
     const apiUrl = urls[endpoint] || urls.chat
-    console.log('Calling:', apiUrl)
+    console.log('Calling Bailian API:', apiUrl)
 
     // 调用百炼 API
     const response = await fetch(apiUrl, {
@@ -66,35 +81,48 @@ exports.handler = async function(event, context) {
     })
 
     console.log('Response status:', response.status)
+    console.log('Response headers:', JSON.stringify([...response.headers.entries()]))
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('API error:', errorText)
+      console.error('Bailian API error:', response.status, errorText)
       return {
         statusCode: response.status,
         headers,
-        body: JSON.stringify({ error: 'Bailian API error', details: errorText })
+        body: JSON.stringify({ 
+          error: 'Bailian API error', 
+          status: response.status,
+          details: errorText.substring(0, 500)
+        })
       }
     }
 
     // 返回响应
-    const text = await response.text()
+    const responseText = await response.text()
+    console.log('Response length:', responseText.length)
+    
     return {
       statusCode: 200,
       headers: {
         ...headers,
-        'Content-Type': payload?.parameters?.incremental_output ? 'text/event-stream' : 'application/json'
+        'Content-Type': payload?.parameters?.incremental_output 
+          ? 'text/event-stream' 
+          : 'application/json'
       },
-      body: text
+      body: responseText
     }
   } catch (error) {
-    console.error('Error:', error.message)
+    console.error('=== Function Error ===')
+    console.error('Message:', error.message)
+    console.error('Stack:', error.stack)
+    
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({ 
         error: 'Internal server error',
-        message: error.message 
+        message: error.message,
+        type: error.constructor.name
       })
     }
   }
