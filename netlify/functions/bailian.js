@@ -1,7 +1,10 @@
 // Netlify Function - 百炼 API 代理
-// 解决浏览器直接调用百炼 API 的 CORS 问题
+console.log('bailian.js function loaded')
 
 export async function handler(event, context) {
+  console.log('handler called, method:', event.httpMethod)
+  console.log('body preview:', event.body?.substring(0, 200))
+
   // 允许 CORS
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -11,11 +14,13 @@ export async function handler(event, context) {
 
   // 处理预检请求
   if (event.httpMethod === 'OPTIONS') {
+    console.log('OPTIONS request, returning 200')
     return { statusCode: 200, headers, body: '' }
   }
 
   // 只允许 POST 请求
   if (event.httpMethod !== 'POST') {
+    console.log('Method not allowed:', event.httpMethod)
     return {
       statusCode: 405,
       headers,
@@ -24,20 +29,27 @@ export async function handler(event, context) {
   }
 
   try {
-    const body = JSON.parse(event.body)
+    const body = JSON.parse(event.body || '{}')
     const { endpoint, payload } = body
 
-    // 百炼 API 配置 - 使用 BAILIAN_ 前缀（不带 VITE_）
+    console.log('Parsed body:', { endpoint, payloadKeys: payload ? Object.keys(payload) : [] })
+
+    // 百炼 API 配置
     const BAILIAN_API_KEY = process.env.BAILIAN_API_KEY || process.env.VITE_BAILIAN_API_KEY
     const BAILIAN_APP_ID = process.env.BAILIAN_APP_ID || process.env.VITE_BAILIAN_APP_ID
 
-    console.log('Function called with:', { endpoint, hasApiKey: !!BAILIAN_API_KEY, hasAppId: !!BAILIAN_APP_ID })
+    console.log('Env vars check:', { 
+      hasApiKey: !!BAILIAN_API_KEY, 
+      apiKeyLength: BAILIAN_API_KEY?.length,
+      hasAppId: !!BAILIAN_APP_ID 
+    })
 
     if (!BAILIAN_API_KEY) {
+      console.error('API Key not configured!')
       return {
         statusCode: 500,
         headers,
-        body: JSON.stringify({ error: 'API Key not configured' })
+        body: JSON.stringify({ error: 'API Key not configured. Please set BAILIAN_API_KEY in environment variables.' })
       }
     }
 
@@ -48,6 +60,7 @@ export async function handler(event, context) {
     }
 
     const apiUrl = urls[endpoint] || urls.chat
+    console.log('Calling Bailian API:', apiUrl)
 
     // 转发请求到百炼 API
     const response = await fetch(apiUrl, {
@@ -59,19 +72,21 @@ export async function handler(event, context) {
       body: JSON.stringify(payload)
     })
 
+    console.log('Bailian response status:', response.status)
+
     if (!response.ok) {
       const errorText = await response.text()
       console.error('Bailian API error:', response.status, errorText)
       return {
         statusCode: response.status,
         headers,
-        body: JSON.stringify({ error: 'Bailian API error', details: errorText })
+        body: JSON.stringify({ error: 'Bailian API error', status: response.status, details: errorText })
       }
     }
 
     // 流式响应处理
-    if (payload.parameters?.incremental_output) {
-      // 流式输出 - 直接透传
+    if (payload?.parameters?.incremental_output) {
+      console.log('Handling streaming response')
       const text = await response.text()
       return {
         statusCode: 200,
@@ -82,7 +97,7 @@ export async function handler(event, context) {
         body: text
       }
     } else {
-      // 非流式响应
+      console.log('Handling JSON response')
       const data = await response.json()
       return {
         statusCode: 200,
@@ -94,7 +109,7 @@ export async function handler(event, context) {
       }
     }
   } catch (error) {
-    console.error('Proxy error:', error)
+    console.error('Handler error:', error.message, error.stack)
     return {
       statusCode: 500,
       headers,
