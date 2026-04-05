@@ -1,4 +1,25 @@
+# Netlify 配置文件
+
+[build]
+  # 构建命令
+  command = "npm run build"
+  # 发布目录（Vite 构建产物）
+  publish = "dist"
+  # Functions 目录
+  functions = "netlify/functions"
+
+[functions]
+  # Functions 运行时（支持 ES modules）
+  node_bundler = "esbuild"
+
+# SPA 路由重定向
 [[redirects]]
   from = "/*"
   to = "/index.html"
+  status = 200
+
+# API 代理重定向（可选，直接调用 .netlify/functions/bailian）
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
   status = 200
